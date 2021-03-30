@@ -17,15 +17,29 @@ exports.handler = async (event) => {
   
   // Save the order in the database, handle payment and if it succesfull send the order to the restaurant
   order.id = uuidv4();
+  order.payment = 'false';
+  order.ordered = 'false';
   await dynamodbManager.saveItem(order);
 
   // Handle the payment
   if (paymentManager.pay(order)) {
+    await dynamodbManager.updateItem(order.id, 'payment', 'true');
+
     if (restaurantManager.order(order)) {
       // send the order to the restaurant
-      return sendResponse(200, 'Order completed')
-    }
-  }
+      await dynamodbManager.updateItem(order.id, 'ordered', 'true');
+      return sendResponse(200, 'Order completed');
 
-  return sendResponse(400, 'There was an error processing the order');
+    } else {
+      await dynamodbManager.updateItem(order.id, 'ordered', 'error');
+      paymentManager.widrawPayment(order)
+      await dynamodbManager.updateItem(order.id, 'payment', 'widrawn');
+
+      return sendResponse(400, 'There was an error processing the order');
+    }
+
+  } else {
+    await dynamodbManager.updateItem(order.id, 'payment', 'error');
+    return sendResponse(400, 'There was an error processing the payment for the order');
   }
+}
