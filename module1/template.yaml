@@ -5,15 +5,24 @@ Resources:
   OrderFunction:
     Type: AWS::Serverless::Function 
     Properties:
-      CodeUri: .
+      CodeUri: ./orderFunction
       Handler: order.handler
       Runtime: nodejs12.x
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref OrdersTable
+      Environment:
+        Variables:
+          ORDERS_TABLE: !Ref OrdersTable    
       Events:
         HelloWorld:
           Type: Api 
           Properties:
             Path: /order
             Method: post
+
+  OrdersTable:
+    Type: AWS::Serverless::SimpleTable
 
 Outputs:
   # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function

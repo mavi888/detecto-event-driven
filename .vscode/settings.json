@@ -1,0 +1,17 @@
+{
+    "serverlessConsole.services": [
+        {
+            "type": "cloudformation",
+            "title": "module1",
+            "timeOffsetInMs": 0,
+            "awsProfile": "default",
+            "stacks": [
+                {
+                    "region": "eu-west-1",
+                    "stackName": "detecto-module1",
+                    "stage": "dev"
+                }
+            ]
+        }
+    ]
+}
