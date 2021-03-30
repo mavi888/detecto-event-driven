@@ -1,1 +1,3 @@
 module1/samconfig.toml
+.vscode/
+.vscode/settings.json

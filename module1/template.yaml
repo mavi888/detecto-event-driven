@@ -2,10 +2,32 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
   
 Resources:
-  OrderFunction:
+  MakePaymentFunction:
     Type: AWS::Serverless::Function 
     Properties:
-      CodeUri: ./orderFunction
+      CodeUri: ./makePaymentFunction
+      Handler: payment.handler
+      Runtime: nodejs12.x
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref OrdersTable
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt OrdersQueue.QueueName
+      Environment:
+        Variables:
+          ORDERS_TABLE: !Ref OrdersTable
+          ORDERS_QUEUE_URL: !Ref OrdersQueue
+      Events:
+        HelloWorld:
+          Type: Api 
+          Properties:
+            Path: /order
+            Method: post
+
+  MakeOrderFunction:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: ./makeOrderFunction
       Handler: order.handler
       Runtime: nodejs12.x
       Policies:
@@ -15,14 +37,17 @@ Resources:
         Variables:
           ORDERS_TABLE: !Ref OrdersTable    
       Events:
-        HelloWorld:
-          Type: Api 
+        MySQSEvent:
+          Type: SQS
           Properties:
-            Path: /order
-            Method: post
+            Queue: !GetAtt OrdersQueue.Arn 
+  
 
   OrdersTable:
     Type: AWS::Serverless::SimpleTable
+  
+  OrdersQueue:
+    Type: AWS::SQS::Queue
 
 Outputs:
   # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
@@ -31,9 +56,3 @@ Outputs:
   OrderApi:
     Description: "API Gateway endpoint URL for Prod stage for Order function"
     Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/order/"
-  OrderFunction:
-    Description: "Hello World Lambda Function ARN"
-    Value: !GetAtt OrderFunction.Arn
-  OrderFunctionIamRole:
-    Description: "Implicit IAM Role created for Hello World function"
-    Value: !GetAtt OrderFunction.Arn

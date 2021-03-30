@@ -52,3 +52,17 @@ Explain how complex is this function, is doing many things:
 This lambda function is very hard to test and make sure that everything works, as there are so many moving parts.
 
 ### Step 2 - Using SQS to make the lambda functions simpler
+
+Let's break down this fat lambda into 2 functions.
+One function will be taking care of the payment.
+And another function will be talking care of ordering in the restaurant.
+
+Now you might be wondering --- so how we can connect 2 functions together.
+
+There are many ways to do it.
+We can just invoke one function from the other. This approach is not recommended. As we are tightly coupling this functions. And also the function that is calling the other function will get billed for the time it takes to complete the operation, plus the time that the other function takes to complete what ever it is doing.
+
+There is another way.
+We can use a queue in between the functions. This is the recommended approach.
+By doing this we make sure that the 2 functions are not tightly coupled and both functions are independent one from the other.
+The big issue here is that the operation becomes async, and now our customer now will recieve a message that the order was taken. It will need another endpoint to know the status of the order.
