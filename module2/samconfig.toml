@@ -1,0 +1,9 @@
+version = 0.1
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "detecto-module2"
+s3_bucket = "aws-sam-cli-managed-default-samclisourcebucket-1p0o6wyncmu4r"
+s3_prefix = "detecto-module2"
+region = "eu-west-1"
+capabilities = "CAPABILITY_IAM"
