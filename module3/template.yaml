@@ -1,0 +1,241 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Parameters:
+  RestaurantOneURL:
+    Type: String
+  RestaurantTwoURL:
+    Type: String
+  
+Resources:
+
+  SAMLogs:  
+    Type: AWS::Logs::LogGroup
+
+  OrderStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Type: EXPRESS
+      DefinitionUri: order.asl.json
+      DefinitionSubstitutions:
+        MakePaymentFunctionArn: !GetAtt MakePaymentFunction.Arn
+        MakeOrderFunctionArn: !GetAtt MakeOrderFunction.Arn
+        OrderFailureFunctionArn: !GetAtt OrderFailureFunction.Arn
+      Events:
+        OrderApiEvent:
+          Type: Api
+          Properties:
+            Method: post
+            Path: /order
+      Logging:
+        Destinations:
+          - CloudWatchLogsLogGroup:
+              LogGroupArn: !GetAtt SAMLogs.Arn
+        IncludeExecutionData: true
+        Level: ALL
+      Policies:
+        - LambdaInvokePolicy:
+            FunctionName: !Ref MakePaymentFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref MakeOrderFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref OrderFailureFunction
+        - CloudWatchLogsFullAccess
+  
+  MakePaymentFunction:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: ./makePaymentFunction
+      Handler: payment.handler
+      Runtime: nodejs12.x
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref OrdersTable
+      Environment:
+        Variables:
+          ORDERS_TABLE: !Ref OrdersTable
+
+  MakeOrderFunction:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: ./makeOrderFunction
+      Handler: order.handler
+      Runtime: nodejs12.x
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref OrdersTable
+        - EventBridgePutEventsPolicy:
+            EventBusName: !Ref RestaurantEventBus
+      Environment:
+        Variables:
+          ORDERS_TABLE: !Ref OrdersTable    
+          RESTAURANT_EVENTBUS: !Ref RestaurantEventBus    
+
+  OrderFailureFunction:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: ./orderFailureFunction
+      Handler: orderFailure.handler
+      Runtime: nodejs12.x
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref OrdersTable
+      Environment:
+        Variables:
+          ORDERS_TABLE: !Ref OrdersTable
+
+  OrdersTable:
+    Type: AWS::Serverless::SimpleTable
+
+  RestaurantEventBus:
+    Type: AWS::Events::EventBus
+    Properties:
+      Name: 'RestaurantEventBus'
+
+  RestaurantOneConnection:
+    Type: AWS::Events::Connection
+    Properties:
+      AuthorizationType: API_KEY
+      Description: 'Connection with an API key'
+      AuthParameters:
+        ApiKeyAuthParameters:
+          ApiKeyName: ApiKeyName
+          ApiKeyValue: RestaurantOneApiKeyValue
+
+  RestaurantOneApiDestination:
+    Type: AWS::Events::ApiDestination
+    Properties:
+      Name: 'RestaurantOneApi'
+      ConnectionArn: !GetAtt RestaurantOneConnection.Arn
+      InvocationEndpoint: !Ref RestaurantOneURL
+      HttpMethod: POST
+      InvocationRateLimitPerSecond: 10
+
+  RestaurantOneEventRule: 
+    Type: AWS::Events::Rule
+    Properties: 
+      Description: "RestaurantOneEventRule"
+      State: "ENABLED"
+      EventBusName: !Ref RestaurantEventBus
+      EventPattern: 
+        source:
+          - "Detecto"
+        detail-type:
+          - "RestaurantOrder"
+        detail:
+          restaurant:
+            - "RestaurantOne"
+      Targets: 
+        - Arn: !GetAtt RestaurantOneApiDestination.Arn
+          RoleArn: !GetAtt EventBridgeTargetRole.Arn
+          Id: "RestaurantOneApiDestination"
+          DeadLetterConfig:
+            Arn: !GetAtt OrdersDLQueue.Arn
+          RetryPolicy:
+            MaximumEventAgeInSeconds: 60
+            MaximumRetryAttempts: 4
+
+  RestaurantTwoConnection:
+    Type: AWS::Events::Connection
+    Properties:
+      AuthorizationType: API_KEY
+      Description: 'Connection with an API key'
+      AuthParameters:
+        ApiKeyAuthParameters:
+          ApiKeyName: ApiKeyName
+          ApiKeyValue: RestaurantTwoApiKeyValue
+
+  RestaurantTwoApiDestination:
+    Type: AWS::Events::ApiDestination
+    Properties:
+      Name: 'RestaurantTwoApi'
+      ConnectionArn: !GetAtt RestaurantTwoConnection.Arn
+      InvocationEndpoint: !Ref RestaurantTwoURL
+      HttpMethod: POST
+      InvocationRateLimitPerSecond: 10
+
+  RestaurantTwoEventRule: 
+    Type: AWS::Events::Rule
+    Properties: 
+      Description: "RestaurantTwoEventRule"
+      State: "ENABLED"
+      EventBusName: !Ref RestaurantEventBus
+      EventPattern: 
+        source:
+          - "Detecto"
+        detail-type:
+          - "RestaurantOrder"
+        detail:
+          restaurant:
+            - "RestaurantTwo"
+      Targets: 
+        - Arn: !GetAtt RestaurantTwoApiDestination.Arn
+          RoleArn: !GetAtt EventBridgeTargetRole.Arn
+          Id: "RestaurantTwoApiDestination"
+          DeadLetterConfig:
+            Arn: !GetAtt OrdersDLQueue.Arn
+          RetryPolicy:
+            MaximumEventAgeInSeconds: 60
+            MaximumRetryAttempts: 4
+
+  RestaurantThreeFunction:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: ./makeOrderFunction
+      Handler: restaurantThreeOrder.handler
+      Runtime: nodejs12.x
+      Events:
+        RestaurantThreeEventRule:
+          Type: EventBridgeRule
+          Properties:
+            EventBusName: !Ref RestaurantEventBus
+            Pattern:
+              source:
+                - "Detecto"
+              detail-type:
+                - "RestaurantOrder"
+              detail:
+                restaurant:
+                  - "RestaurantThree"
+
+  EventBridgeTargetRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - events.amazonaws.com
+            Action:
+              - sts:AssumeRole      
+      Policies:
+        - PolicyName: AllowAPIdestinationAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: 'events:InvokeApiDestination'
+                Resource: !GetAtt RestaurantOneApiDestination.Arn
+              - Effect: Allow
+                Action: 'events:InvokeApiDestination'
+                Resource: !GetAtt RestaurantTwoApiDestination.Arn
+        - PolicyName: WriteToSQS
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: 'sqs:SendMessage'
+                Resource: !GetAtt OrdersDLQueue.Arn
+
+  OrdersDLQueue:
+    Type: AWS::SQS::Queue
+
+Outputs:
+  # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
+  # Find out more about other implicit resources you can reference within SAM
+  # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
+  OrderApi:
+    Description: "API Gateway endpoint URL for Prod stage for Order function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/order/"

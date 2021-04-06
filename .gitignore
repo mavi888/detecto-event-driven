@@ -1,4 +1,6 @@
-module1/samconfig.toml
+.aws-sam
 .vscode/
 .vscode/settings.json
 .vscode/settings.json
+node_modules
+samconfig.toml
