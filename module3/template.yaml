@@ -68,8 +68,8 @@ Resources:
             EventBusName: !Ref RestaurantEventBus
       Environment:
         Variables:
-          ORDERS_TABLE: !Ref OrdersTable    
-          RESTAURANT_EVENTBUS: !Ref RestaurantEventBus    
+          ORDERS_TABLE: !Ref OrdersTable  
+          RESTAURANT_EVENTBUS: !Ref RestaurantEventBus  
 
   OrderFailureFunction:
     Type: AWS::Serverless::Function 
@@ -221,13 +221,30 @@ Resources:
               - Effect: Allow
                 Action: 'events:InvokeApiDestination'
                 Resource: !GetAtt RestaurantTwoApiDestination.Arn
-        - PolicyName: WriteToSQS
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action: 'sqs:SendMessage'
-                Resource: !GetAtt OrdersDLQueue.Arn
+
+  OrdersDLQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref OrdersDLQueue
+      PolicyDocument:
+        Statement: 
+          - Effect: Allow
+            Action: 'sqs:SendMessage'
+            Resource: !GetAtt OrdersDLQueue.Arn
+            Principal:
+              Service: events.amazonaws.com
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !GetAtt RestaurantOneEventRule.Arn
+          - Effect: Allow
+            Action: 'sqs:SendMessage'
+            Resource: !GetAtt OrdersDLQueue.Arn
+            Principal:
+              Service: events.amazonaws.com
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !GetAtt RestaurantTwoEventRule.Arn
 
   OrdersDLQueue:
     Type: AWS::SQS::Queue
